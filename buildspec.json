@@ -38,7 +38,7 @@
     },
     "name": "win-process-audio-capture",
     "displayName": "Process Audio Capture for OBS",
-    "version": "1.0.0",
+    "version": "0.0.2",
     "author": "DeyterV",
     "website": "https://github.com/DeyterV/win-process-audio-capture",
     "email": "deyter.vladimir@gmail.com"

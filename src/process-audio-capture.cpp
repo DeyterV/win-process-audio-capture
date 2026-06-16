@@ -417,6 +417,13 @@ static void fill_process_list(obs_property_t *list)
 	if (snapshot == INVALID_HANDLE_VALUE)
 		return;
 
+	struct ProcessEntry {
+		DWORD pid;
+		std::string exe;
+	};
+
+	std::vector<ProcessEntry> entries;
+
 	PROCESSENTRY32W pe = {};
 	pe.dwSize = sizeof(pe);
 
@@ -427,21 +434,28 @@ static void fill_process_list(obs_property_t *list)
 
 			char exe[MAX_PATH];
 			WideCharToMultiByte(CP_UTF8, 0, pe.szExeFile, -1, exe, sizeof(exe), NULL, NULL);
-
-			char label[MAX_PATH + 32];
-			snprintf(label, sizeof(label), "%s (PID %lu)", exe,
-				 (unsigned long)pe.th32ProcessID);
-
-			char value[MAX_PATH + 32];
-			snprintf(value, sizeof(value), "%s|%lu", exe,
-				 (unsigned long)pe.th32ProcessID);
-
-			obs_property_list_add_string(list, label, value);
+			entries.push_back({pe.th32ProcessID, exe});
 
 		} while (Process32NextW(snapshot, &pe));
 	}
 
 	CloseHandle(snapshot);
+
+	std::sort(entries.begin(), entries.end(), [](const ProcessEntry &a, const ProcessEntry &b) {
+		return a.pid < b.pid;
+	});
+
+	for (const auto &entry : entries) {
+		char label[MAX_PATH + 32];
+		snprintf(label, sizeof(label), "%s (PID %lu)", entry.exe.c_str(),
+			 (unsigned long)entry.pid);
+
+		char value[MAX_PATH + 32];
+		snprintf(value, sizeof(value), "%s|%lu", entry.exe.c_str(),
+			 (unsigned long)entry.pid);
+
+		obs_property_list_add_string(list, label, value);
+	}
 }
 
 static bool refresh_clicked(obs_properties_t *props, obs_property_t *, void *)

@@ -13,6 +13,7 @@
 #include <util/windows/ComPtr.hpp>
 #include <util/windows/WinHandle.hpp>
 
+#include <algorithm>
 #include <string>
 #include <vector>
 

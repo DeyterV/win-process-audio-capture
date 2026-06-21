@@ -493,8 +493,11 @@ static bool CollectPidsWithAudioSessions(std::set<DWORD> &pids)
 	return ok;
 }
 
-static void fill_process_list(obs_property_t *list)
+static void fill_process_list(obs_property_t *list, DWORD saved_pid)
 {
+	std::set<DWORD> pids_with_audio;
+	bool have_audio_info = CollectPidsWithAudioSessions(pids_with_audio);
+
 	HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
 	if (snapshot == INVALID_HANDLE_VALUE)
 		return;
@@ -512,6 +515,11 @@ static void fill_process_list(obs_property_t *list)
 	if (Process32FirstW(snapshot, &pe)) {
 		do {
 			if (pe.th32ProcessID == GetCurrentProcessId())
+				continue;
+
+			bool keep = !have_audio_info || pids_with_audio.count(pe.th32ProcessID) > 0 ||
+				    (saved_pid != 0 && pe.th32ProcessID == saved_pid);
+			if (!keep)
 				continue;
 
 			char exe[MAX_PATH];
@@ -540,23 +548,27 @@ static void fill_process_list(obs_property_t *list)
 	}
 }
 
-static bool refresh_clicked(obs_properties_t *props, obs_property_t *, void *)
+static bool refresh_clicked(obs_properties_t *props, obs_property_t *, void *data)
 {
+	DWORD saved_pid = data ? ((ProcessAudioCapture *)data)->GetSavedPid() : 0;
+
 	obs_property_t *list = obs_properties_get(props, OPT_PROCESS);
 	obs_property_list_clear(list);
-	fill_process_list(list);
+	fill_process_list(list, saved_pid);
 	return true;
 }
 
-static obs_properties_t *get_properties(void *)
+static obs_properties_t *get_properties(void *data)
 {
+	DWORD saved_pid = data ? ((ProcessAudioCapture *)data)->GetSavedPid() : 0;
+
 	obs_properties_t *props = obs_properties_create();
 
 	obs_property_t *list = obs_properties_add_list(props, OPT_PROCESS,
 						       obs_module_text("Process"),
 						       OBS_COMBO_TYPE_LIST,
 						       OBS_COMBO_FORMAT_STRING);
-	fill_process_list(list);
+	fill_process_list(list, saved_pid);
 
 	obs_properties_add_button(props, "refresh", obs_module_text("RefreshProcessList"),
 				  refresh_clicked);

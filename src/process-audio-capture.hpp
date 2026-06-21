@@ -50,6 +50,7 @@ public:
 	void Update(obs_data_t *settings);
 	void Activate();
 	void Deactivate();
+	DWORD GetSavedPid() const { return preferred_pid; }
 
 private:
 	obs_source_t *source = nullptr;

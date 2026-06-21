@@ -2,6 +2,10 @@
 
 #include <obs-module.h>
 #include <media-io/audio-io.h>
+#include <audiopolicy.h>
+#include <objbase.h>
+
+#include <set>
 
 #define OPT_PROCESS "process"
 #define OBS_KSAUDIO_SPEAKER_4POINT1 (KSAUDIO_SPEAKER_SURROUND | SPEAKER_LOW_FREQUENCY)
@@ -410,6 +414,84 @@ DWORD WINAPI ProcessAudioCapture::BackgroundThread(LPVOID param)
 
 /* ------------------------------------------------------------------ */
 /* OBS source registration                                              */
+
+static bool CollectPidsWithAudioSessions(std::set<DWORD> &pids)
+{
+	HRESULT hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+	bool we_initialized = (hr == S_OK || hr == S_FALSE);
+	bool com_usable = SUCCEEDED(hr) || hr == RPC_E_CHANGED_MODE;
+
+	bool ok = false;
+
+	if (com_usable) {
+		ComPtr<IMMDeviceEnumerator> enumerator;
+		hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL,
+				      IID_PPV_ARGS(enumerator.Assign()));
+
+		if (SUCCEEDED(hr)) {
+			ComPtr<IMMDeviceCollection> devices;
+			hr = enumerator->EnumAudioEndpoints(eRender, DEVICE_STATE_ACTIVE,
+							     devices.Assign());
+
+			if (SUCCEEDED(hr)) {
+				UINT count = 0;
+				devices->GetCount(&count);
+
+				for (UINT i = 0; i < count; i++) {
+					ComPtr<IMMDevice> device;
+					if (FAILED(devices->Item(i, device.Assign())))
+						continue;
+
+					ComPtr<IAudioSessionManager2> sessionManager;
+					if (FAILED(device->Activate(__uuidof(IAudioSessionManager2),
+								     CLSCTX_ALL, nullptr,
+								     (void **)sessionManager.Assign())))
+						continue;
+
+					ComPtr<IAudioSessionEnumerator> sessionEnum;
+					if (FAILED(sessionManager->GetSessionEnumerator(
+						    sessionEnum.Assign())))
+						continue;
+
+					int sessionCount = 0;
+					sessionEnum->GetCount(&sessionCount);
+
+					for (int j = 0; j < sessionCount; j++) {
+						ComPtr<IAudioSessionControl> sessionControl;
+						if (FAILED(sessionEnum->GetSession(
+							    j, sessionControl.Assign())))
+							continue;
+
+						ComPtr<IAudioSessionControl2> sessionControl2;
+						if (FAILED(sessionControl->QueryInterface(
+							    IID_PPV_ARGS(sessionControl2.Assign()))))
+							continue;
+
+						if (sessionControl2->IsSystemSoundsSession() == S_OK)
+							continue;
+
+						AudioSessionState state;
+						if (FAILED(sessionControl2->GetState(&state)) ||
+						    state == AudioSessionStateExpired)
+							continue;
+
+						DWORD pid = 0;
+						if (SUCCEEDED(sessionControl2->GetProcessId(&pid)) &&
+						    pid != 0)
+							pids.insert(pid);
+					}
+				}
+
+				ok = true;
+			}
+		}
+	}
+
+	if (we_initialized)
+		CoUninitialize();
+
+	return ok;
+}
 
 static void fill_process_list(obs_property_t *list)
 {

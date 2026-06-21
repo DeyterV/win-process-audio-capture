@@ -5,7 +5,7 @@ OBS Studio plugin that adds an audio capture source which records audio from a s
 ## Features
 
 - Captures audio from any process via Windows process loopback (WASAPI)
-- Select process by exe name + PID from a dropdown list
+- Select process by exe name + PID from a dropdown list of processes that currently have an audio session
 - Refresh button to update the process list
 - Automatically reconnects if the process restarts
 - No virtual audio cable required
